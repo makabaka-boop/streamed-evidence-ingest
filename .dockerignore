@@ -1,0 +1,12 @@
+# Keep the build context small and reproducible.
+.git
+*.md
+data/
+tmp/
+*.db
+*.db-wal
+*.db-shm
+faultdata/
+# local build artifacts
+/server
+/verify

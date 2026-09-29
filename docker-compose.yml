@@ -1,0 +1,54 @@
+name: uploadsvc
+
+services:
+  server:
+    build:
+      context: .
+      target: runtime
+    image: uploadsvc:latest
+    command: ["/usr/local/bin/server", "-addr", ":8080", "-data", "/data"]
+    environment:
+      UPLOAD_FAULTS: "0"
+    ports:
+      # Exposed for manual experimentation; verify talks over the compose
+      # network and does not need this mapping.
+      - "8080:8080"
+    volumes:
+      - upload-data:/data
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/server", "-ping", "-addr", ":8080"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 3s
+    restart: unless-stopped
+
+  # One-shot acceptance suite. Builds the same image, waits for the server to
+  # be healthy, then exits non-zero on the first failed check.
+  verify:
+    build:
+      context: .
+      target: runtime
+    image: uploadsvc:latest
+    entrypoint: ["/usr/local/bin/verify"]
+    command:
+      - "-base-url"
+      - "http://server:8080"
+      - "-server-bin"
+      - "/usr/local/bin/server"
+      - "-fault-data"
+      - "/faultdata"
+      - "-fault-addr"
+      - "127.0.0.1:18080"
+    environment:
+      BASE_URL: "http://server:8080"
+      SERVER_BIN: "/usr/local/bin/server"
+      FAULT_DATA: "/faultdata"
+      FAULT_ADDR: "127.0.0.1:18080"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  upload-data:

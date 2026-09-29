@@ -1,0 +1,15 @@
+# local data and run artifacts
+/data/
+/faultdata/
+*.db
+*.db-wal
+*.db-shm
+*.tmp
+
+# compiled binaries
+/server
+/verify
+
+# os/editor cruft
+.DS_Store
+*.swp
