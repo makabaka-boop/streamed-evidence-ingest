@@ -1,0 +1,63 @@
+# Upload service stack.
+#
+# Fixed acceptance sequence (runnable from a clean checkout):
+#   docker compose config --quiet
+#   docker compose build
+#   docker compose run --rm verify
+#
+# `app` is the long-lived upload service. `verify` is a one-shot
+# black/grey-box test client that waits for app health, exercises the HTTP
+# contract and the failure-injection/restart recovery paths, and exits
+# non-zero on any violation.
+#
+# Repeat the run with a clean slate via:
+#   docker compose down -v        # removes the data volume
+#   docker compose run --rm verify
+name: uploadsvc
+
+x-app-env: &app-env
+  UPLOAD_DATA_DIR: /data
+  UPLOAD_ADDR: ":8080"
+  UPLOAD_DB: /data/uploads.db
+  # Enables X-Upload-Failpoint. Safe in this isolated test stack; leave it
+  # unset in production.
+  UPLOAD_ENABLE_FAILPOINTS: "1"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: uploadsvc:latest
+    environment: *app-env
+    volumes:
+      - upload-data:/data
+    ports:
+      - "8080:8080"
+    # Crash failpoints call os.Exit; restart so the verify service can
+    # observe real startup recovery.
+    restart: always
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/verify", "-mode", "healthcheck"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+      start_period: 1s
+
+  verify:
+    image: uploadsvc:latest
+    entrypoint: ["/usr/local/bin/verify"]
+    command: ["-mode", "full", "-base", "http://app:8080", "-data", "/data"]
+    environment: *app-env
+    volumes:
+      # Shared with app so the grey-box checks can cross-check files against
+      # the live SQLite database.
+      - upload-data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+    # One-shot: do not restart the test run.
+    restart: "no"
+
+volumes:
+  upload-data:
